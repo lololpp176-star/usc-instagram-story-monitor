@@ -8,8 +8,12 @@ Environment variables:
   DISCORD_WEBHOOK_URL
   APIFY_TOKEN
 
-The script splits the 17 accounts into four Apify runs because the selected
-Story scraper caps free accounts at 10 Story results per run / 40 per day.
+Free-tier strategy:
+  - Check all 17 accounts in ONE Apify run.
+  - Ask for at most 10 Story results per run.
+  - GitHub Actions runs 4 times per day (every 6 hours).
+  - That keeps the theoretical maximum at 40 Story results/day,
+    matching the current free-plan daily result cap.
 """
 
 import json
@@ -21,11 +25,24 @@ from pathlib import Path
 
 import requests
 
-ACCOUNT_GROUPS = [
-    ["universityparkifc", "sc.zbt", "chiphi.usc", "uscdelts"],
-    ["uscpanhellenic", "phidelt.sc", "phisigusc", "tke.sc"],
-    ["usc.ka", "sc.beta", "lxa.usc", "sc.ato"],
-    ["snu.usc", "uscthetaxi", "usc.sammy", "sigmachi.sc", "usckappasig"],
+USERNAMES = [
+    "sc.zbt",
+    "universityparkifc",
+    "phidelt.sc",
+    "snu.usc",
+    "chiphi.usc",
+    "phisigusc",
+    "usc.ka",
+    "sc.beta",
+    "lxa.usc",
+    "uscpanhellenic",
+    "uscthetaxi",
+    "usc.sammy",
+    "uscdelts",
+    "tke.sc",
+    "sc.ato",
+    "sigmachi.sc",
+    "usckappasig",
 ]
 
 ACTOR_ID = "intropix~instagram-stories-scraper"
@@ -40,7 +57,7 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 TEST_DISCORD_ONLY = os.getenv("TEST_DISCORD_ONLY", "false").strip().lower() == "true"
 
 SESSION = requests.Session()
-SESSION.headers.update({"User-Agent": "USC-IG-Story-Discord-Bridge/2.0"})
+SESSION.headers.update({"User-Agent": "USC-IG-Story-Discord-Bridge/3.0"})
 
 
 def require_secrets():
@@ -65,7 +82,6 @@ def load_state():
 
 
 def save_state(seen):
-    # A bounded list is plenty for deduplication.
     ids = sorted(seen)
     if len(ids) > 5000:
         ids = ids[-5000:]
@@ -75,15 +91,16 @@ def save_state(seen):
     )
 
 
-def fetch_group(usernames):
+def fetch_all_stories():
     payload = {
-        "usernames": usernames,
+        "usernames": USERNAMES,
         "maxResults": 10,
     }
 
     last_error = None
     for attempt in range(3):
         try:
+            print(f"Checking {len(USERNAMES)} Instagram accounts...")
             response = SESSION.post(
                 APIFY_URL,
                 headers={
@@ -95,42 +112,28 @@ def fetch_group(usernames):
                 timeout=300,
             )
             response.raise_for_status()
+
             data = response.json()
             if not isinstance(data, list):
                 raise RuntimeError("Apify response was not a JSON list.")
-            return data
+
+            unique = {}
+            for story in data:
+                pk = str(story.get("story_pk") or "")
+                if pk:
+                    unique[pk] = story
+
+            return list(unique.values())
+
         except Exception as exc:
             last_error = exc
             if attempt < 2:
-                print(
-                    f"Apify group failed ({exc}); retrying in "
-                    f"{20 * (attempt + 1)} seconds..."
-                )
-                time.sleep(20 * (attempt + 1))
+                delay = 20 * (attempt + 1)
+                print(f"Apify check failed ({exc}); retrying in {delay} seconds...")
+                time.sleep(delay)
 
-    print(f"WARNING: Skipping this group after retries: {last_error}")
+    print(f"WARNING: Apify check failed after retries: {last_error}")
     return []
-
-
-def fetch_all_stories():
-    combined = []
-    for index, group in enumerate(ACCOUNT_GROUPS, start=1):
-        print(f"Checking group {index}/{len(ACCOUNT_GROUPS)}: {', '.join(group)}")
-        items = fetch_group(group)
-        combined.extend(items)
-
-        # Small pause between Actor runs.
-        if index < len(ACCOUNT_GROUPS):
-            time.sleep(2)
-
-    # Deduplicate in case the upstream source ever returns repeats.
-    unique = {}
-    for story in combined:
-        pk = str(story.get("story_pk") or "")
-        if pk:
-            unique[pk] = story
-
-    return list(unique.values())
 
 
 def discord_request(*, payload, files=None):
@@ -313,7 +316,6 @@ def main():
     }
 
     if first_run:
-        # First cloud run establishes a baseline and does NOT flood Discord.
         seen.update(current_ids)
         save_state(seen)
         print(
@@ -335,7 +337,6 @@ def main():
             posted += 1
             time.sleep(1)
 
-    # Write state even when nothing was posted, keeping formatting consistent.
     save_state(seen)
     print(f"Finished. Posted {posted} new Story/Stories.")
 
