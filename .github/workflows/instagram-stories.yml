@@ -1,0 +1,62 @@
+name: Instagram Stories to Discord
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Choose what to run"
+        required: true
+        default: "normal"
+        type: choice
+        options:
+          - normal
+          - test-discord
+  schedule:
+    - cron: "17 7 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-story-monitor
+  cancel-in-progress: false
+
+jobs:
+  check-stories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requirements
+        run: python -m pip install -r instagram-story-discord-free/requirements.txt
+
+      - name: Check Instagram Stories
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          TEST_DISCORD_ONLY: ${{ github.event.inputs.mode == 'test-discord' }}
+        run: python instagram-story-discord-free/ig_stories_to_discord.py
+
+      - name: Save Story history
+        if: ${{ github.event.inputs.mode != 'test-discord' }}
+        run: |
+          if [ -f instagram-story-discord-free/seen_instagram_stories.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add instagram-story-discord-free/seen_instagram_stories.json
+
+            if git diff --cached --quiet; then
+              echo "No Story-history changes to save."
+            else
+              git commit -m "Update Instagram Story history"
+              git push
+            fi
+          fi
