@@ -26,6 +26,8 @@ USERNAMES = [
     "sc.ato",
     "sigmachi.sc",
     "usckappasig",
+    "lacasadeusc",
+    "usccasa",
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
