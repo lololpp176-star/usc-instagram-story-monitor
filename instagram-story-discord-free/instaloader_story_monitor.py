@@ -105,7 +105,7 @@ def make_loader():
         download_comments=False,
         save_metadata=False,
         compress_json=False,
-        max_connection_attempts=2,
+        max_connection_attempts=1,
         request_timeout=60.0,
         quiet=True,
     )

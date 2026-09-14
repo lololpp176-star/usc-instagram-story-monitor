@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "paused": false,
+  "attempts": 0,
+  "last_attempt": 0,
+  "reason": "Manual experiment only; automatic monitoring disabled"
+}

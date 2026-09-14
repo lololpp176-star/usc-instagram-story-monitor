@@ -4,39 +4,54 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Choose what to run"
+        description: "single-check runs one bounded experiment; normal obeys the automatic enable flag"
         required: true
-        default: "normal"
+        default: normal
         type: choice
         options:
           - normal
-          - test-discord
-          - test-casa
+          - single-check
+
 permissions:
   contents: write
 
 concurrency:
   group: instagram-story-monitor-instaloader
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check-stories:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
-
+    timeout-minutes: 10
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      - name: Reserve one check
+        id: gate
+        env:
+          MONITOR_MODE: ${{ inputs.mode }}
+        run: python instagram-story-discord-free/experiment_control.py prepare
+
+      - name: Persist pause before contacting Instagram
+        if: steps.gate.outputs.allowed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add instagram-story-discord-free/monitor_control.json
+          git commit -m "Reserve bounded Instagram check"
+          git push origin HEAD:main
+
       - name: Install requirements
+        if: steps.gate.outputs.allowed == 'true'
         run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
 
-      - name: Restore Instagram session
+      - name: Restore existing Instagram session
+        if: steps.gate.outputs.allowed == 'true'
         env:
           INSTAGRAM_SESSION_B64: ${{ secrets.INSTAGRAM_SESSION_B64 }}
         run: |
@@ -45,32 +60,32 @@ jobs:
           chmod 600 "$RUNNER_TEMP/instagram-session"
           echo "IG_SESSION_FILE=$RUNNER_TEMP/instagram-session" >> "$GITHUB_ENV"
 
-      - name: Check Instagram Stories
+      - name: Check Instagram Stories once
+        if: steps.gate.outputs.allowed == 'true'
+        id: check
+        timeout-minutes: 4
         env:
           IG_USERNAME: botwatch92848
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-          TEST_DISCORD_ONLY: ${{ github.event.inputs.mode == 'test-discord' }}
-          TEST_CASA_ONLY: ${{ github.event.inputs.mode == 'test-casa' }}
         run: python -u instagram-story-discord-free/instaloader_story_monitor.py
 
-      - name: Save Story history and profile IDs
+      - name: Record outcome and save state
+        if: always() && steps.gate.outputs.allowed == 'true'
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
         run: |
+          python instagram-story-discord-free/experiment_control.py finish
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ -f instagram-story-discord-free/seen_instagram_stories_instaloader.json ]; then
-            git add instagram-story-discord-free/seen_instagram_stories_instaloader.json
+          git add instagram-story-discord-free/monitor_control.json
+          git add instagram-story-discord-free/seen_instagram_stories_instaloader.json
+          git add instagram-story-discord-free/instagram_profile_ids.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record bounded Instagram check outcome"
+            git push origin HEAD:main
           fi
 
-          if [ -f instagram-story-discord-free/instagram_profile_ids.json ]; then
-            git add instagram-story-discord-free/instagram_profile_ids.json
-          fi
-
-          if git diff --cached --quiet; then
-            echo "No monitor-state changes to save."
-          else
-            git commit -m "Update Instaloader Story monitor state"
-            git push
-          fi
+      - name: Remove temporary session
+        if: always()
+        run: rm -f "$RUNNER_TEMP/instagram-session"
