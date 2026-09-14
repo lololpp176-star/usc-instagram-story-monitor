@@ -3,10 +3,12 @@ import mimetypes
 import os
 import sys
 import time
+from io import BytesIO
 from pathlib import Path
 
 import instaloader
 import requests
+from PIL import Image
 
 USERNAMES = [
     "sc.zbt",
@@ -229,6 +231,28 @@ def download_media(url):
     )
 
 
+def crop_image_bytes_to_4x5(image_bytes):
+    """Center-crop an image Story to 4:5 so Discord displays it larger."""
+    image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    width, height = image.size
+    target_ratio = 4 / 5
+    current_ratio = width / height
+
+    if current_ratio > target_ratio:
+        new_width = int(height * target_ratio)
+        left = (width - new_width) // 2
+        box = (left, 0, left + new_width, height)
+    else:
+        new_height = int(width / target_ratio)
+        top = (height - new_height) // 2
+        box = (0, top, width, top + new_height)
+
+    cropped = image.crop(box)
+    output = BytesIO()
+    cropped.save(output, format="JPEG", quality=95, optimize=True)
+    return output.getvalue(), "image/jpeg", ".jpg"
+
+
 def extension_for(is_video, content_type):
     if is_video:
         return ".mp4"
@@ -245,8 +269,6 @@ def post_story_item(item, username):
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
 
-    # Use a normal Discord attachment (not an embed image) so portrait Stories
-    # render substantially larger. Only the Instagram handle is clickable.
     message_content = (
         f"||<@&{DISCORD_PING_USER_ID}>||\n"
         f"**[@{username}]({profile_url}) — New Instagram Story**\n"
@@ -255,7 +277,14 @@ def post_story_item(item, username):
 
     try:
         media_bytes, content_type = download_media(media_url)
-        ext = extension_for(item.is_video, content_type)
+
+        if item.is_video:
+            upload_bytes = media_bytes
+            upload_type = content_type or "video/mp4"
+            ext = extension_for(True, content_type)
+        else:
+            upload_bytes, upload_type, ext = crop_image_bytes_to_4x5(media_bytes)
+
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
         payload = {
@@ -268,8 +297,8 @@ def post_story_item(item, username):
         files = {
             "files[0]": (
                 filename,
-                media_bytes,
-                content_type or "application/octet-stream",
+                upload_bytes,
+                upload_type,
             )
         }
 
@@ -279,9 +308,8 @@ def post_story_item(item, username):
         print(f"Discord upload failed for @{username}; trying direct media URL.")
 
     except Exception as exc:
-        print(f"Could not download media for @{username}: {exc}")
+        print(f"Could not prepare media for @{username}: {exc}")
 
-    # Fallback to Discord unfurling the direct media URL if the upload fails.
     fallback = {
         "content": f"{message_content}\n{media_url}",
         "allowed_mentions": {
