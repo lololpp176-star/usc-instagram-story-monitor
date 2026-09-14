@@ -2,6 +2,15 @@ name: Instagram Stories via Instaloader
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Choose what to run"
+        required: true
+        default: "normal"
+        type: choice
+        options:
+          - normal
+          - test-discord
   schedule:
     # GitHub's shortest supported schedule interval is 5 minutes.
     # Offset from the top of the hour to reduce scheduler congestion.
@@ -32,6 +41,7 @@ jobs:
         run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
 
       - name: Restore Instagram session
+        if: ${{ github.event.inputs.mode != 'test-discord' }}
         env:
           INSTAGRAM_SESSION_B64: ${{ secrets.INSTAGRAM_SESSION_B64 }}
         run: |
@@ -45,6 +55,7 @@ jobs:
           IG_USERNAME: botwatch92848
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          TEST_DISCORD_ONLY: ${{ github.event.inputs.mode == 'test-discord' }}
         run: python -u instagram-story-discord-free/instaloader_story_monitor.py
 
       - name: Save Story history and profile IDs
