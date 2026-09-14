@@ -29,6 +29,14 @@ USERNAMES = [
     "lacasadeusc",
     "usccasa",
     "uscalphasig",
+    "ago.usc",
+    "usc.pikapp",
+    "sigepusc",
+    "uscphipsi",
+    "usc.sae",
+    "aepiusc",
+    "zetapsi.sc",
+    "usczetaphirho",
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
