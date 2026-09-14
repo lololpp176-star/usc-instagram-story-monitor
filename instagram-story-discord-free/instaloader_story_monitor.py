@@ -37,6 +37,9 @@ SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 
+# Discord user to ping before each Story embed.
+DISCORD_PING_USER_ID = "1548822200545579098"
+
 HTTP = requests.Session()
 HTTP.headers.update({"User-Agent": "USC-Instagram-Story-Monitor/1.0"})
 
@@ -241,14 +244,14 @@ def post_story_item(item, username):
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
 
-    content = (
-        f"**@{username} posted a new Instagram Story**\n"
-        f"{profile_url}"
-    )
+    # Put the ping on its own spoilered line, followed by a visual line break
+    # before Discord renders the embed.
+    ping_content = f"||<@{DISCORD_PING_USER_ID}>||\n\u200b"
 
     embed = {
-        "title": f"New Instagram Story — @{username}",
+        "title": f"@{username} — New Instagram Story",
         "url": profile_url,
+        "description": f"[Open @{username} on Instagram]({profile_url})",
         "timestamp": item.date_utc.isoformat(),
         "footer": {"text": "USC Instagram Story monitor"},
     }
@@ -259,12 +262,24 @@ def post_story_item(item, username):
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
         if not item.is_video:
+            # Photos render directly inside the custom Discord embed.
             embed["image"] = {"url": f"attachment://{filename}"}
+        else:
+            # Discord does not allow webhooks to set a custom embed.video field,
+            # so use the Story's image preview in the embed and attach the MP4.
+            try:
+                embed["image"] = {"url": item.url}
+                embed["description"] += "\n\n🎥 Video Story attached below."
+            except Exception:
+                embed["description"] += "\n\n🎥 Video Story attached below."
 
         payload = {
-            "content": content,
+            "content": ping_content,
             "embeds": [embed],
-            "allowed_mentions": {"parse": []},
+            "allowed_mentions": {
+                "parse": [],
+                "users": [DISCORD_PING_USER_ID],
+            },
         }
         files = {
             "files[0]": (
@@ -282,15 +297,23 @@ def post_story_item(item, username):
     except Exception as exc:
         print(f"Could not download media for @{username}: {exc}")
 
-    fallback = {
-        "content": f"{content}\n{media_url}",
-        "allowed_mentions": {"parse": []},
+    fallback_embed = {
+        **embed,
     }
+
     if not item.is_video:
-        fallback["embeds"] = [{
-            **embed,
-            "image": {"url": media_url},
-        }]
+        fallback_embed["image"] = {"url": media_url}
+    else:
+        fallback_embed["description"] += f"\n\n[Open Story video]({media_url})"
+
+    fallback = {
+        "content": ping_content,
+        "embeds": [fallback_embed],
+        "allowed_mentions": {
+            "parse": [],
+            "users": [DISCORD_PING_USER_ID],
+        },
+    }
     return discord_request(fallback)
 
 
