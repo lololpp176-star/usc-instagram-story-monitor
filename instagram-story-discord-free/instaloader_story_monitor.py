@@ -269,7 +269,8 @@ def post_story_item(item, username):
     webhook_url, role_id = destination_for(username)
 
     # Keep the role ping outside the embed so Discord can actually notify it.
-    message_content = f"||<@&{role_id}>||"
+    # Keep a spacer line after the ping; Discord may trim bare trailing newlines.
+    message_content = f"||<@&{role_id}>||\n\u200b"
 
     try:
         media_bytes, content_type = download_media(media_url)
