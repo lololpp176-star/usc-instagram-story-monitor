@@ -106,56 +106,78 @@ def load_or_resolve_profile_ids(loader):
         except Exception:
             existing = {}
 
-    complete = all(
-        username in existing and str(existing[username]).isdigit()
+    ids = {
+        username: int(existing[username])
         for username in USERNAMES
-    )
-    if complete:
-        return {u: int(existing[u]) for u in USERNAMES}
+        if username in existing and str(existing[username]).isdigit()
+    }
+
+    missing = [u for u in USERNAMES if u not in ids]
+    if not missing:
+        print("Loaded all Instagram numeric profile IDs from repository state.")
+        return ids
 
     if not APIFY_TOKEN:
         raise RuntimeError(
             "Instagram numeric profile IDs are missing and APIFY_TOKEN is not available."
         )
 
-    print("Resolving Instagram numeric IDs through Apify once...")
+    print(
+        f"Resolving {len(missing)} Instagram numeric IDs through "
+        "Apify's official profile scraper..."
+    )
+
     actor_url = (
         "https://api.apify.com/v2/actors/"
-        "instaprism~instagram-profile-scraper/run-sync-get-dataset-items"
+        "apify~instagram-profile-scraper/run-sync-get-dataset-items"
     )
-    response = HTTP.post(
-        actor_url,
-        headers={
-            "Authorization": f"Bearer {APIFY_TOKEN}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        json={"usernames": USERNAMES},
-        timeout=300,
-    )
-    response.raise_for_status()
-    rows = response.json()
-    if not isinstance(rows, list):
-        raise RuntimeError("Unexpected Apify profile response.")
 
-    ids = {}
-    for row in rows:
-        username = str(row.get("username") or "").lower()
-        user_id = str(row.get("userId") or "")
-        if username in USERNAMES and user_id.isdigit():
-            ids[username] = int(user_id)
-
-    missing = [u for u in USERNAMES if u not in ids]
-    if missing:
-        raise RuntimeError(
-            "Could not resolve these Instagram IDs: " + ", ".join(missing)
+    # Small batches avoid one long-running Actor call timing out.
+    batch_size = 6
+    for offset in range(0, len(missing), batch_size):
+        batch = missing[offset:offset + batch_size]
+        print(
+            f"Resolving batch {offset // batch_size + 1}: "
+            + ", ".join("@" + u for u in batch)
         )
 
-    PROFILE_IDS_FILE.write_text(
-        json.dumps(ids, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    print("Saved all 17 Instagram numeric profile IDs.")
+        response = HTTP.post(
+            actor_url,
+            headers={
+                "Authorization": f"Bearer {APIFY_TOKEN}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "usernames": batch,
+                "includeAboutSection": False,
+            },
+            timeout=300,
+        )
+        response.raise_for_status()
+
+        rows = response.json()
+        if not isinstance(rows, list):
+            raise RuntimeError("Unexpected Apify profile response.")
+
+        for row in rows:
+            username = str(row.get("username") or "").lower()
+            user_id = str(row.get("id") or row.get("userId") or "")
+            if username in USERNAMES and user_id.isdigit():
+                ids[username] = int(user_id)
+
+        PROFILE_IDS_FILE.write_text(
+            json.dumps(ids, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    still_missing = [u for u in USERNAMES if u not in ids]
+    if still_missing:
+        raise RuntimeError(
+            "Could not resolve these Instagram IDs: " + ", ".join(still_missing)
+        )
+
+    print("Saved all Instagram numeric profile IDs.")
     return ids
 
 
