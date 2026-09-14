@@ -1,0 +1,77 @@
+name: Audit Instagram Following
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Instaloader
+        run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
+
+      - name: Restore Instagram session
+        env:
+          INSTAGRAM_SESSION_B64: ${{ secrets.INSTAGRAM_SESSION_B64 }}
+        run: |
+          test -n "$INSTAGRAM_SESSION_B64"
+          printf '%s' "$INSTAGRAM_SESSION_B64" | base64 --decode > "$RUNNER_TEMP/instagram-session"
+          chmod 600 "$RUNNER_TEMP/instagram-session"
+          echo "IG_SESSION_FILE=$RUNNER_TEMP/instagram-session" >> "$GITHUB_ENV"
+
+      - name: Compare followed accounts to tracker
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          from pathlib import Path
+          import instaloader
+
+          source = Path("instagram-story-discord-free/instaloader_story_monitor.py").read_text(encoding="utf-8")
+          tree = ast.parse(source)
+          tracked = None
+          for node in tree.body:
+              if isinstance(node, ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target, ast.Name) and target.id == "USERNAMES":
+                          tracked = [str(x).lower() for x in ast.literal_eval(node.value)]
+                          break
+              if tracked is not None:
+                  break
+          if tracked is None:
+              raise RuntimeError("Could not find USERNAMES in tracker")
+
+          loader = instaloader.Instaloader(
+              quiet=True,
+              max_connection_attempts=2,
+              request_timeout=60,
+          )
+          session_file = os.environ["IG_SESSION_FILE"]
+          loader.load_session_from_file("botwatch92848", session_file)
+          logged_in_as = loader.test_login()
+          if not logged_in_as:
+              raise RuntimeError("Instagram session is not valid")
+
+          profile = instaloader.Profile.from_username(loader.context, logged_in_as)
+          followed = sorted({p.username.lower() for p in profile.get_followees()})
+          tracked_set = set(tracked)
+          followed_set = set(followed)
+
+          print(f"LOGGED_IN_AS={logged_in_as}")
+          print(f"FOLLOWING_COUNT={len(followed)}")
+          print(f"TRACKED_COUNT={len(tracked)}")
+          print("FOLLOWED_NOT_TRACKED=" + ",".join(sorted(followed_set - tracked_set)))
+          print("TRACKED_NOT_FOLLOWED=" + ",".join(sorted(tracked_set - followed_set)))
+          PY
