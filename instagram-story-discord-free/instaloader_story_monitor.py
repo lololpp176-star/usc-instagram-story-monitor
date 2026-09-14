@@ -36,6 +36,7 @@ IG_USERNAME = os.getenv("IG_USERNAME", "botwatch92848").strip()
 SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
+TEST_DISCORD_ONLY = os.getenv("TEST_DISCORD_ONLY", "").lower() in {"1", "true", "yes"}
 
 # Discord user to ping before each Story embed.
 DISCORD_PING_USER_ID = "1548822200545579098"
@@ -317,7 +318,39 @@ def post_story_item(item, username):
     return discord_request(fallback)
 
 
+def send_discord_test():
+    if not DISCORD_WEBHOOK_URL:
+        raise RuntimeError("DISCORD_WEBHOOK_URL is missing.")
+
+    ping_content = f"||<@{DISCORD_PING_USER_ID}>||\n\u200b"
+    embed = {
+        "title": "@test.account — New Instagram Story",
+        "url": "https://www.instagram.com/",
+        "description": (
+            "**TEST MESSAGE**\n"
+            "This is how future Instagram Story notifications will look."
+        ),
+        "footer": {"text": "USC Instagram Story monitor • test"},
+    }
+    payload = {
+        "content": ping_content,
+        "embeds": [embed],
+        "allowed_mentions": {
+            "parse": [],
+            "users": [DISCORD_PING_USER_ID],
+        },
+    }
+
+    if not discord_request(payload):
+        raise RuntimeError("Discord test message failed.")
+    print("Discord embed test sent successfully.")
+
+
 def main():
+    if TEST_DISCORD_ONLY:
+        send_discord_test()
+        return
+
     require_config()
     seen, first_run = load_seen()
 
