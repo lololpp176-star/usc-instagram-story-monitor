@@ -36,6 +36,7 @@ USERNAMES = [
     "usc.sae",
     "aepiusc",
     "zetapsi.sc",
+    "scdeltaeta",
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
