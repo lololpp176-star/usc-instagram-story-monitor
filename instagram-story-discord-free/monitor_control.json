@@ -3,5 +3,5 @@
   "paused": true,
   "attempts": 1,
   "last_attempt": 1789427554.2550278,
-  "reason": "Check in progress or interrupted"
+  "reason": "Check failed or was interrupted; manual review required"
 }
