@@ -3,12 +3,10 @@ import mimetypes
 import os
 import sys
 import time
-from io import BytesIO
 from pathlib import Path
 
 import instaloader
 import requests
-from PIL import Image
 
 USERNAMES = [
     "sc.zbt",
@@ -231,28 +229,6 @@ def download_media(url):
     )
 
 
-def crop_image_bytes_to_4x5(image_bytes):
-    """Center-crop an image Story to 4:5 so Discord displays it larger."""
-    image = Image.open(BytesIO(image_bytes)).convert("RGB")
-    width, height = image.size
-    target_ratio = 4 / 5
-    current_ratio = width / height
-
-    if current_ratio > target_ratio:
-        new_width = int(height * target_ratio)
-        left = (width - new_width) // 2
-        box = (left, 0, left + new_width, height)
-    else:
-        new_height = int(width / target_ratio)
-        top = (height - new_height) // 2
-        box = (0, top, width, top + new_height)
-
-    cropped = image.crop(box)
-    output = BytesIO()
-    cropped.save(output, format="JPEG", quality=95, optimize=True)
-    return output.getvalue(), "image/jpeg", ".jpg"
-
-
 def extension_for(is_video, content_type):
     if is_video:
         return ".mp4"
@@ -271,24 +247,30 @@ def post_story_item(item, username):
 
     message_content = (
         f"||<@&{DISCORD_PING_USER_ID}>||\n"
-        f"**[@{username}]({profile_url}) — New Instagram Story**\n"
-        "-# USC Instagram Story monitor • Made by @minirml"
+        f"**[@{username}]({profile_url}) — New Instagram Story**"
     )
+
+    embed = {
+        "timestamp": item.date_utc.isoformat(),
+        "footer": {"text": "Made by Mini"},
+    }
 
     try:
         media_bytes, content_type = download_media(media_url)
-
-        if item.is_video:
-            upload_bytes = media_bytes
-            upload_type = content_type or "video/mp4"
-            ext = extension_for(True, content_type)
-        else:
-            upload_bytes, upload_type, ext = crop_image_bytes_to_4x5(media_bytes)
-
+        ext = extension_for(item.is_video, content_type)
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
+
+        if not item.is_video:
+            embed["image"] = {"url": f"attachment://{filename}"}
+        else:
+            try:
+                embed["image"] = {"url": item.url}
+            except Exception:
+                pass
 
         payload = {
             "content": message_content,
+            "embeds": [embed],
             "allowed_mentions": {
                 "parse": [],
                 "roles": [DISCORD_PING_USER_ID],
@@ -297,8 +279,8 @@ def post_story_item(item, username):
         files = {
             "files[0]": (
                 filename,
-                upload_bytes,
-                upload_type,
+                media_bytes,
+                content_type or "application/octet-stream",
             )
         }
 
@@ -308,15 +290,27 @@ def post_story_item(item, username):
         print(f"Discord upload failed for @{username}; trying direct media URL.")
 
     except Exception as exc:
-        print(f"Could not prepare media for @{username}: {exc}")
+        print(f"Could not download media for @{username}: {exc}")
+
+    fallback_embed = {
+        **embed,
+    }
+
+    if not item.is_video:
+        fallback_embed["image"] = {"url": media_url}
 
     fallback = {
-        "content": f"{message_content}\n{media_url}",
+        "content": message_content,
+        "embeds": [fallback_embed],
         "allowed_mentions": {
             "parse": [],
             "roles": [DISCORD_PING_USER_ID],
         },
     }
+
+    if item.is_video:
+        fallback["content"] += f"\n{media_url}"
+
     return discord_request(fallback)
 
 
