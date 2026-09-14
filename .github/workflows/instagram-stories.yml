@@ -11,11 +11,6 @@ on:
         options:
           - normal
           - test-discord
-  schedule:
-    # Four checks per day, every 6 hours.
-    # Using one Apify run with maxResults=10 keeps the theoretical
-    # maximum at the free-plan 40 Story results/day cap.
-    - cron: "17 */6 * * *"
 
 permissions:
   contents: write
