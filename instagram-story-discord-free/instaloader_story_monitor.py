@@ -35,6 +35,7 @@ PROFILE_IDS_FILE = BASE_DIR / "instagram_profile_ids.json"
 IG_USERNAME = os.getenv("IG_USERNAME", "botwatch92848").strip()
 SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 
 HTTP = requests.Session()
 HTTP.headers.update({"User-Agent": "USC-Instagram-Story-Monitor/1.0"})
@@ -105,34 +106,56 @@ def load_or_resolve_profile_ids(loader):
         except Exception:
             existing = {}
 
-    ids = {}
-    changed = False
+    complete = all(
+        username in existing and str(existing[username]).isdigit()
+        for username in USERNAMES
+    )
+    if complete:
+        return {u: int(existing[u]) for u in USERNAMES}
 
-    for username in USERNAMES:
-        saved = existing.get(username)
-        if isinstance(saved, int):
-            ids[username] = saved
-            continue
-        if isinstance(saved, str) and saved.isdigit():
-            ids[username] = int(saved)
-            continue
-
-        print(f"Resolving @{username}...")
-        profile = instaloader.Profile.from_username(loader.context, username)
-        ids[username] = int(profile.userid)
-        changed = True
-        time.sleep(1)
-
-    # Remove stale entries and normalize formatting.
-    if set(existing.keys()) != set(ids.keys()):
-        changed = True
-
-    if changed or not PROFILE_IDS_FILE.exists():
-        PROFILE_IDS_FILE.write_text(
-            json.dumps(ids, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+    if not APIFY_TOKEN:
+        raise RuntimeError(
+            "Instagram numeric profile IDs are missing and APIFY_TOKEN is not available."
         )
 
+    print("Resolving Instagram numeric IDs through Apify once...")
+    actor_url = (
+        "https://api.apify.com/v2/actors/"
+        "instaprism~instagram-profile-scraper/run-sync-get-dataset-items"
+    )
+    response = HTTP.post(
+        actor_url,
+        headers={
+            "Authorization": f"Bearer {APIFY_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={"usernames": USERNAMES},
+        timeout=300,
+    )
+    response.raise_for_status()
+    rows = response.json()
+    if not isinstance(rows, list):
+        raise RuntimeError("Unexpected Apify profile response.")
+
+    ids = {}
+    for row in rows:
+        username = str(row.get("username") or "").lower()
+        user_id = str(row.get("userId") or "")
+        if username in USERNAMES and user_id.isdigit():
+            ids[username] = int(user_id)
+
+    missing = [u for u in USERNAMES if u not in ids]
+    if missing:
+        raise RuntimeError(
+            "Could not resolve these Instagram IDs: " + ", ".join(missing)
+        )
+
+    PROFILE_IDS_FILE.write_text(
+        json.dumps(ids, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print("Saved all 17 Instagram numeric profile IDs.")
     return ids
 
 
