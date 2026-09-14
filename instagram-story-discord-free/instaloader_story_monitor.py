@@ -32,7 +32,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATE_FILE = BASE_DIR / "seen_instagram_stories_instaloader.json"
 PROFILE_IDS_FILE = BASE_DIR / "instagram_profile_ids.json"
 
-IG_USERNAME = os.getenv("IG_USERNAME", "botwatch928498").strip()
+IG_USERNAME = os.getenv("IG_USERNAME", "botwatch92848").strip()
 SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 
