@@ -245,11 +245,12 @@ def post_story_item(item, username):
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
 
-    # Spoilered role ping, then a blank line, then the Story title outside
-    # the embed in normal Discord message text.
+    # Spoilered role ping, then a linked bold Story title, followed by a
+    # dedicated spacer line before the embed.
     message_content = (
         f"||<@&{DISCORD_PING_USER_ID}>||\n\n"
-        f"**@{username} — New Instagram Story**"
+        f"**[@{username} — New Instagram Story]({profile_url})**\n\n"
+        "\u200b"
     )
 
     embed = {
@@ -265,6 +266,8 @@ def post_story_item(item, username):
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
         if not item.is_video:
+            # Use Discord's full-size embed image slot. Discord itself controls
+            # the final on-screen size for portrait media.
             embed["image"] = {"url": f"attachment://{filename}"}
         else:
             try:
