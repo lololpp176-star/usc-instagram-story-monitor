@@ -1,7 +1,7 @@
 {
   "enabled": false,
-  "paused": false,
-  "attempts": 0,
-  "last_attempt": 0,
-  "reason": "Manual experiment only; automatic monitoring disabled"
+  "paused": true,
+  "attempts": 1,
+  "last_attempt": 1789427554.2550278,
+  "reason": "Check in progress or interrupted"
 }
