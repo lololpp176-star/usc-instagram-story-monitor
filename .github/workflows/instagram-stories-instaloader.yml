@@ -2,18 +2,22 @@ name: Instagram Stories via Instaloader
 
 on:
   workflow_dispatch:
+  schedule:
+    # GitHub's shortest supported schedule interval is 5 minutes.
+    # Offset from the top of the hour to reduce scheduler congestion.
+    - cron: "3-58/5 * * * *"
 
 permissions:
   contents: write
 
 concurrency:
   group: instagram-story-monitor-instaloader
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   check-stories:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 4
 
     steps:
       - name: Check out repository
