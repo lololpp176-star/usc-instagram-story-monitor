@@ -38,7 +38,7 @@ jobs:
 
       - name: Check Instagram Stories
         env:
-          IG_USERNAME: botwatch928498
+          IG_USERNAME: botwatch92848
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python instagram-story-discord-free/instaloader_story_monitor.py
 
