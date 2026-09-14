@@ -37,6 +37,7 @@ USERNAMES = [
     "aepiusc",
     "zetapsi.sc",
     "scdeltaeta",
+    "uscvalorant",
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -255,7 +256,7 @@ def extension_for(is_video, content_type):
 
 
 def destination_for(username):
-    if username in {"lacasadeusc", "usccasa"}:
+    if username in {"lacasadeusc", "usccasa", "uscvalorant", "usc.games"}:
         if not CASA_DISCORD_WEBHOOK_URL:
             raise RuntimeError("CASA_DISCORD_WEBHOOK_URL is missing.")
         return CASA_DISCORD_WEBHOOK_URL, CASA_ROLE_ID
