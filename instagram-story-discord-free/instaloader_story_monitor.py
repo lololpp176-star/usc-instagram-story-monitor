@@ -28,6 +28,7 @@ USERNAMES = [
     "usckappasig",
     "lacasadeusc",
     "usccasa",
+    "uscalphasig",
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
