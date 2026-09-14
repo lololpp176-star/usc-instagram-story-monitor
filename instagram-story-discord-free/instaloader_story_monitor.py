@@ -251,8 +251,9 @@ def post_story_item(item, username):
     )
 
     embed = {
-        "title": f"@{username} — New Instagram Story",
-        "url": profile_url,
+        "description": (
+            f"**[@{username}]({profile_url}) — New Instagram Story**"
+        ),
         "timestamp": item.date_utc.isoformat(),
         "footer": {"text": "Made by @minirml"},
     }
