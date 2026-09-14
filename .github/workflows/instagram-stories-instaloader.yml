@@ -14,8 +14,7 @@ on:
           - test-casa
   schedule:
     # GitHub's shortest supported schedule interval is 5 minutes.
-    # Offset from the top of the hour to reduce scheduler congestion.
-    - cron: "3-58/5 * * * *"
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
