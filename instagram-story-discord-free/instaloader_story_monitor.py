@@ -1,0 +1,299 @@
+import json
+import mimetypes
+import os
+import sys
+import time
+from pathlib import Path
+
+import instaloader
+import requests
+
+USERNAMES = [
+    "sc.zbt",
+    "universityparkifc",
+    "phidelt.sc",
+    "snu.usc",
+    "chiphi.usc",
+    "phisigusc",
+    "usc.ka",
+    "sc.beta",
+    "lxa.usc",
+    "uscpanhellenic",
+    "uscthetaxi",
+    "usc.sammy",
+    "uscdelts",
+    "tke.sc",
+    "sc.ato",
+    "sigmachi.sc",
+    "usckappasig",
+]
+
+BASE_DIR = Path(__file__).resolve().parent
+STATE_FILE = BASE_DIR / "seen_instagram_stories_instaloader.json"
+PROFILE_IDS_FILE = BASE_DIR / "instagram_profile_ids.json"
+
+IG_USERNAME = os.getenv("IG_USERNAME", "botwatch928498").strip()
+SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+
+HTTP = requests.Session()
+HTTP.headers.update({"User-Agent": "USC-Instagram-Story-Monitor/1.0"})
+
+
+def require_config():
+    missing = []
+    if not IG_USERNAME:
+        missing.append("IG_USERNAME")
+    if not SESSION_FILE:
+        missing.append("IG_SESSION_FILE")
+    if not DISCORD_WEBHOOK_URL:
+        missing.append("DISCORD_WEBHOOK_URL")
+    if missing:
+        print("Missing configuration: " + ", ".join(missing))
+        sys.exit(2)
+
+
+def load_seen():
+    if not STATE_FILE.exists():
+        return set(), True
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return set(str(x) for x in data.get("seen", [])), False
+    except Exception:
+        return set(), True
+
+
+def save_seen(seen):
+    ids = sorted(seen)
+    if len(ids) > 10000:
+        ids = ids[-10000:]
+    STATE_FILE.write_text(
+        json.dumps({"seen": ids}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def make_loader():
+    loader = instaloader.Instaloader(
+        download_pictures=False,
+        download_videos=False,
+        download_video_thumbnails=False,
+        download_geotags=False,
+        download_comments=False,
+        save_metadata=False,
+        compress_json=False,
+        max_connection_attempts=2,
+        request_timeout=60.0,
+        quiet=True,
+    )
+    loader.load_session_from_file(IG_USERNAME, filename=SESSION_FILE)
+    logged_in_as = loader.test_login()
+    if not logged_in_as:
+        raise RuntimeError(
+            "The Instagram session is no longer valid. "
+            "Create a fresh Instaloader session and replace the GitHub secret."
+        )
+    print(f"Instagram session valid for @{logged_in_as}.")
+    return loader
+
+
+def load_or_resolve_profile_ids(loader):
+    existing = {}
+    if PROFILE_IDS_FILE.exists():
+        try:
+            existing = json.loads(PROFILE_IDS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    ids = {}
+    changed = False
+
+    for username in USERNAMES:
+        saved = existing.get(username)
+        if isinstance(saved, int):
+            ids[username] = saved
+            continue
+        if isinstance(saved, str) and saved.isdigit():
+            ids[username] = int(saved)
+            continue
+
+        print(f"Resolving @{username}...")
+        profile = instaloader.Profile.from_username(loader.context, username)
+        ids[username] = int(profile.userid)
+        changed = True
+        time.sleep(1)
+
+    # Remove stale entries and normalize formatting.
+    if set(existing.keys()) != set(ids.keys()):
+        changed = True
+
+    if changed or not PROFILE_IDS_FILE.exists():
+        PROFILE_IDS_FILE.write_text(
+            json.dumps(ids, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    return ids
+
+
+def discord_request(payload, files=None):
+    for _ in range(5):
+        if files:
+            response = HTTP.post(
+                DISCORD_WEBHOOK_URL,
+                params={"wait": "true"},
+                data={"payload_json": json.dumps(payload)},
+                files=files,
+                timeout=90,
+            )
+        else:
+            response = HTTP.post(
+                DISCORD_WEBHOOK_URL,
+                params={"wait": "true"},
+                json=payload,
+                timeout=45,
+            )
+
+        if response.status_code == 429:
+            try:
+                delay = float(response.json().get("retry_after", 1.5))
+            except Exception:
+                delay = 1.5
+            time.sleep(max(delay, 0.5))
+            continue
+
+        if 200 <= response.status_code < 300:
+            return True
+
+        print(f"Discord returned {response.status_code}: {response.text[:500]}")
+        return False
+
+    return False
+
+
+def download_media(url):
+    response = HTTP.get(url, timeout=90)
+    response.raise_for_status()
+    return (
+        response.content,
+        response.headers.get("Content-Type", "application/octet-stream"),
+    )
+
+
+def extension_for(is_video, content_type):
+    if is_video:
+        return ".mp4"
+    guessed = mimetypes.guess_extension(
+        (content_type or "").split(";")[0].strip()
+    )
+    if guessed in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        return guessed
+    return ".jpg"
+
+
+def post_story_item(item, username):
+    story_id = str(item.mediaid)
+    media_url = item.video_url if item.is_video else item.url
+    profile_url = f"https://www.instagram.com/{username}/"
+
+    content = (
+        f"**@{username} posted a new Instagram Story**\n"
+        f"{profile_url}"
+    )
+
+    embed = {
+        "title": f"New Instagram Story — @{username}",
+        "url": profile_url,
+        "timestamp": item.date_utc.isoformat(),
+        "footer": {"text": "USC Instagram Story monitor"},
+    }
+
+    try:
+        media_bytes, content_type = download_media(media_url)
+        ext = extension_for(item.is_video, content_type)
+        filename = f"{username.replace('.', '_')}_{story_id}{ext}"
+
+        if not item.is_video:
+            embed["image"] = {"url": f"attachment://{filename}"}
+
+        payload = {
+            "content": content,
+            "embeds": [embed],
+            "allowed_mentions": {"parse": []},
+        }
+        files = {
+            "files[0]": (
+                filename,
+                media_bytes,
+                content_type or "application/octet-stream",
+            )
+        }
+
+        if discord_request(payload, files=files):
+            return True
+
+        print(f"Discord upload failed for @{username}; trying direct media URL.")
+
+    except Exception as exc:
+        print(f"Could not download media for @{username}: {exc}")
+
+    fallback = {
+        "content": f"{content}\n{media_url}",
+        "allowed_mentions": {"parse": []},
+    }
+    if not item.is_video:
+        fallback["embeds"] = [{
+            **embed,
+            "image": {"url": media_url},
+        }]
+    return discord_request(fallback)
+
+
+def main():
+    require_config()
+    seen, first_run = load_seen()
+
+    loader = make_loader()
+    profile_ids = load_or_resolve_profile_ids(loader)
+    wanted_ids = set(profile_ids.values())
+    id_to_username = {v: k for k, v in profile_ids.items()}
+
+    found_items = []
+
+    for story in loader.get_stories(userids=list(wanted_ids)):
+        username = id_to_username.get(int(story.owner_id), story.owner_username)
+        for item in story.get_items():
+            found_items.append((item.date_utc, item, username))
+
+    found_items.sort(key=lambda x: x[0])
+
+    current_ids = {str(item.mediaid) for _, item, _ in found_items}
+
+    if first_run:
+        seen.update(current_ids)
+        save_seen(seen)
+        print(
+            f"Initial baseline saved ({len(current_ids)} active Stories). "
+            "Nothing posted."
+        )
+        return
+
+    posted = 0
+    for _, item, username in found_items:
+        story_id = str(item.mediaid)
+        if story_id in seen:
+            continue
+
+        if post_story_item(item, username):
+            seen.add(story_id)
+            save_seen(seen)
+            posted += 1
+            print(f"Posted @{username} Story {story_id}.")
+            time.sleep(1)
+
+    save_seen(seen)
+    print(f"Finished. Posted {posted} new Story/Stories.")
+
+
+if __name__ == "__main__":
+    main()
