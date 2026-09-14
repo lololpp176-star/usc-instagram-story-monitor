@@ -268,28 +268,35 @@ def post_story_item(item, username):
     profile_url = f"https://www.instagram.com/{username}/"
     webhook_url, role_id = destination_for(username)
 
-    story_timestamp = int(item.date_utc.timestamp())
-
-    # One Discord message only:
-    # mention -> header -> media attachment -> compact footer.
-    message_content = (
-        f"||<@&{role_id}>||\n\n"
-        f"### **[@{username}]({profile_url}) — New Instagram Story**"
-    )
-
-    footer_embed = {
-        "footer": {"text": "Made by @minirml"},
-        "timestamp": item.date_utc.isoformat(),
-    }
+    # Keep the role ping outside the embed so Discord can actually notify it.
+    message_content = f"||<@&{role_id}>||"
 
     try:
         media_bytes, content_type = download_media(media_url)
         ext = extension_for(item.is_video, content_type)
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
+        story_embed = {
+            "description": (
+                f"### **[@{username}]({profile_url}) — New Instagram Story**"
+            ),
+            "footer": {"text": "Made by @minirml"},
+            "timestamp": item.date_utc.isoformat(),
+        }
+
+        # Discord custom embeds support uploaded images through attachment://.
+        # Uploaded videos cannot be placed inside a custom embed, so videos stay
+        # as an attachment while the Story header/footer remain in the embed.
+        if not item.is_video:
+            story_embed["image"] = {"url": f"attachment://{filename}"}
+        else:
+            preview_url = getattr(item, "url", None)
+            if preview_url:
+                story_embed["image"] = {"url": preview_url}
+
         payload = {
             "content": message_content,
-            "embeds": [footer_embed],
+            "embeds": [story_embed],
             "allowed_mentions": {
                 "parse": [],
                 "roles": [role_id],
@@ -314,9 +321,17 @@ def post_story_item(item, username):
     except Exception as exc:
         print(f"Could not download media for @{username}: {exc}")
 
+    fallback_embed = {
+        "description": (
+            f"### **[@{username}]({profile_url}) — New Instagram Story**\n"
+            f"{media_url}"
+        ),
+        "footer": {"text": "Made by @minirml"},
+        "timestamp": item.date_utc.isoformat(),
+    }
     fallback = {
-        "content": f"{message_content}\n{media_url}",
-        "embeds": [footer_embed],
+        "content": message_content,
+        "embeds": [fallback_embed],
         "allowed_mentions": {
             "parse": [],
             "roles": [role_id],
