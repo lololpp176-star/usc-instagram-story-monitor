@@ -41,7 +41,7 @@ jobs:
           IG_USERNAME: botwatch92848
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: python instagram-story-discord-free/instaloader_story_monitor.py
+        run: python -u instagram-story-discord-free/instaloader_story_monitor.py
 
       - name: Save Story history and profile IDs
         run: |
