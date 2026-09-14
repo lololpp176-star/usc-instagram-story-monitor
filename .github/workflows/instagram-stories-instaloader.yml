@@ -1,0 +1,63 @@
+name: Instagram Stories via Instaloader
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-story-monitor-instaloader
+  cancel-in-progress: false
+
+jobs:
+  check-stories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requirements
+        run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
+
+      - name: Restore Instagram session
+        env:
+          INSTAGRAM_SESSION_B64: ${{ secrets.INSTAGRAM_SESSION_B64 }}
+        run: |
+          test -n "$INSTAGRAM_SESSION_B64"
+          printf '%s' "$INSTAGRAM_SESSION_B64" | base64 --decode > "$RUNNER_TEMP/instagram-session"
+          chmod 600 "$RUNNER_TEMP/instagram-session"
+          echo "IG_SESSION_FILE=$RUNNER_TEMP/instagram-session" >> "$GITHUB_ENV"
+
+      - name: Check Instagram Stories
+        env:
+          IG_USERNAME: botwatch928498
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python instagram-story-discord-free/instaloader_story_monitor.py
+
+      - name: Save Story history and profile IDs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -f instagram-story-discord-free/seen_instagram_stories_instaloader.json ]; then
+            git add instagram-story-discord-free/seen_instagram_stories_instaloader.json
+          fi
+
+          if [ -f instagram-story-discord-free/instagram_profile_ids.json ]; then
+            git add instagram-story-discord-free/instagram_profile_ids.json
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No monitor-state changes to save."
+          else
+            git commit -m "Update Instaloader Story monitor state"
+            git push
+          fi
