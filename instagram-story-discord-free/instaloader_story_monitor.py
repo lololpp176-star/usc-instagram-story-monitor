@@ -277,13 +277,58 @@ def post_story_item(item, username):
         ext = extension_for(item.is_video, content_type)
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
-        if not item.is_video:
-            embed["image"] = {"url": f"attachment://{filename}"}
-        else:
+        if item.is_video:
+            # Send the mention + embed first, then send the actual video as a
+            # second webhook message so Discord displays it underneath.
             try:
                 embed["image"] = {"url": item.url}
             except Exception:
                 pass
+
+            header_payload = {
+                "content": message_content,
+                "embeds": [embed],
+                "allowed_mentions": {
+                    "parse": [],
+                    "roles": [role_id],
+                },
+            }
+
+            if not discord_request(webhook_url, header_payload):
+                print(f"Discord embed failed for @{username}.")
+                return False
+
+            video_payload = {
+                "allowed_mentions": {"parse": []},
+            }
+            video_files = {
+                "files[0]": (
+                    filename,
+                    media_bytes,
+                    content_type or "video/mp4",
+                )
+            }
+
+            if discord_request(
+                webhook_url,
+                video_payload,
+                files=video_files,
+            ):
+                return True
+
+            print(
+                f"Discord video upload failed for @{username}; "
+                "trying direct video URL."
+            )
+            return discord_request(
+                webhook_url,
+                {
+                    "content": media_url,
+                    "allowed_mentions": {"parse": []},
+                },
+            )
+
+        embed["image"] = {"url": f"attachment://{filename}"}
 
         payload = {
             "content": message_content,
@@ -311,11 +356,8 @@ def post_story_item(item, username):
 
     fallback_embed = {
         **embed,
+        "image": {"url": media_url},
     }
-
-    if not item.is_video:
-        fallback_embed["image"] = {"url": media_url}
-
     fallback = {
         "content": message_content,
         "embeds": [fallback_embed],
@@ -324,10 +366,6 @@ def post_story_item(item, username):
             "roles": [role_id],
         },
     }
-
-    if item.is_video:
-        fallback["content"] += f"\n{media_url}"
-
     return discord_request(webhook_url, fallback)
 
 
