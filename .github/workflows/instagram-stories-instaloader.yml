@@ -11,6 +11,7 @@ on:
         options:
           - normal
           - test-discord
+          - test-casa
   schedule:
     # GitHub's shortest supported schedule interval is 5 minutes.
     # Offset from the top of the hour to reduce scheduler congestion.
@@ -56,6 +57,7 @@ jobs:
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           TEST_DISCORD_ONLY: ${{ github.event.inputs.mode == 'test-discord' }}
+          TEST_CASA_ONLY: ${{ github.event.inputs.mode == 'test-casa' }}
         run: python -u instagram-story-discord-free/instaloader_story_monitor.py
 
       - name: Save Story history and profile IDs
