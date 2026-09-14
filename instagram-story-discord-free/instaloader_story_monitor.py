@@ -245,38 +245,21 @@ def post_story_item(item, username):
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
 
-    # Spoilered role ping, then a compact bold header. Only the Instagram
-    # handle itself is clickable.
+    # Use a normal Discord attachment (not an embed image) so portrait Stories
+    # render substantially larger. Only the Instagram handle is clickable.
     message_content = (
         f"||<@&{DISCORD_PING_USER_ID}>||\n"
-        f"**[@{username}]({profile_url}) — New Instagram Story**"
+        f"**[@{username}]({profile_url}) — New Instagram Story**\n"
+        "-# USC Instagram Story monitor • Made by @minirml"
     )
-
-    embed = {
-        "timestamp": item.date_utc.isoformat(),
-        "footer": {
-            "text": "USC Instagram Story monitor • Made by @minirml"
-        },
-    }
 
     try:
         media_bytes, content_type = download_media(media_url)
         ext = extension_for(item.is_video, content_type)
         filename = f"{username.replace('.', '_')}_{story_id}{ext}"
 
-        if not item.is_video:
-            # Use Discord's full-size embed image slot. Discord itself controls
-            # the final on-screen size for portrait media.
-            embed["image"] = {"url": f"attachment://{filename}"}
-        else:
-            try:
-                embed["image"] = {"url": item.url}
-            except Exception:
-                pass
-
         payload = {
             "content": message_content,
-            "embeds": [embed],
             "allowed_mentions": {
                 "parse": [],
                 "roles": [DISCORD_PING_USER_ID],
@@ -298,25 +281,14 @@ def post_story_item(item, username):
     except Exception as exc:
         print(f"Could not download media for @{username}: {exc}")
 
-    fallback_embed = {
-        **embed,
-    }
-
-    if not item.is_video:
-        fallback_embed["image"] = {"url": media_url}
-
+    # Fallback to Discord unfurling the direct media URL if the upload fails.
     fallback = {
-        "content": message_content,
-        "embeds": [fallback_embed],
+        "content": f"{message_content}\n{media_url}",
         "allowed_mentions": {
             "parse": [],
             "roles": [DISCORD_PING_USER_ID],
         },
     }
-
-    if item.is_video:
-        fallback["content"] += f"\n{media_url}"
-
     return discord_request(fallback)
 
 
