@@ -189,11 +189,11 @@ def load_or_resolve_profile_ids(loader):
     return ids
 
 
-def discord_request(payload, files=None):
+def discord_request(webhook_url, payload, files=None):
     for _ in range(5):
         if files:
             response = HTTP.post(
-                DISCORD_WEBHOOK_URL,
+                webhook_url,
                 params={"wait": "true"},
                 data={"payload_json": json.dumps(payload)},
                 files=files,
@@ -201,7 +201,7 @@ def discord_request(payload, files=None):
             )
         else:
             response = HTTP.post(
-                DISCORD_WEBHOOK_URL,
+                webhook_url,
                 params={"wait": "true"},
                 json=payload,
                 timeout=45,
@@ -244,13 +244,22 @@ def extension_for(is_video, content_type):
     return ".jpg"
 
 
+def destination_for(username):
+    if username in {"lacasadeusc", "usccasa"}:
+        if not CASA_DISCORD_WEBHOOK_URL:
+            raise RuntimeError("CASA_DISCORD_WEBHOOK_URL is missing.")
+        return CASA_DISCORD_WEBHOOK_URL, CASA_ROLE_ID
+    return DISCORD_WEBHOOK_URL, DISCORD_PING_USER_ID
+
+
 def post_story_item(item, username):
     story_id = str(item.mediaid)
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
+    webhook_url, role_id = destination_for(username)
 
     message_content = (
-        f"||<@&{DISCORD_PING_USER_ID}>||\n"
+        f"||<@&{role_id}>||\n"
         "\u200b"
     )
 
@@ -280,7 +289,7 @@ def post_story_item(item, username):
             "embeds": [embed],
             "allowed_mentions": {
                 "parse": [],
-                "roles": [DISCORD_PING_USER_ID],
+                "roles": [role_id],
             },
         }
         files = {
@@ -291,7 +300,7 @@ def post_story_item(item, username):
             )
         }
 
-        if discord_request(payload, files=files):
+        if discord_request(webhook_url, payload, files=files):
             return True
 
         print(f"Discord upload failed for @{username}; trying direct media URL.")
@@ -311,14 +320,14 @@ def post_story_item(item, username):
         "embeds": [fallback_embed],
         "allowed_mentions": {
             "parse": [],
-            "roles": [DISCORD_PING_USER_ID],
+            "roles": [role_id],
         },
     }
 
     if item.is_video:
         fallback["content"] += f"\n{media_url}"
 
-    return discord_request(fallback)
+    return discord_request(webhook_url, fallback)
 
 
 def send_discord_test():
