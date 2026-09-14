@@ -37,11 +37,13 @@ PROFILE_IDS_FILE = BASE_DIR / "instagram_profile_ids.json"
 IG_USERNAME = os.getenv("IG_USERNAME", "botwatch92848").strip()
 SESSION_FILE = os.getenv("IG_SESSION_FILE", "").strip()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+CASA_DISCORD_WEBHOOK_URL = os.getenv("CASA_DISCORD_WEBHOOK_URL", "").strip()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 TEST_DISCORD_ONLY = os.getenv("TEST_DISCORD_ONLY", "").lower() in {"1", "true", "yes"}
 
 # Discord user to ping before each Story embed.
 DISCORD_PING_USER_ID = "1548822200545579098"
+CASA_ROLE_ID = "1548865195634327613"
 
 HTTP = requests.Session()
 HTTP.headers.update({"User-Agent": "USC-Instagram-Story-Monitor/1.0"})
