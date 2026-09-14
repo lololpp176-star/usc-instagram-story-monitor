@@ -40,6 +40,7 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 CASA_DISCORD_WEBHOOK_URL = os.getenv("CASA_DISCORD_WEBHOOK_URL", "").strip()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 TEST_DISCORD_ONLY = os.getenv("TEST_DISCORD_ONLY", "").lower() in {"1", "true", "yes"}
+TEST_CASA_ONLY = os.getenv("TEST_CASA_ONLY", "").lower() in {"1", "true", "yes"}
 
 # Discord user to ping before each Story embed.
 DISCORD_PING_USER_ID = "1548822200545579098"
@@ -362,7 +363,47 @@ def send_discord_test():
     print("Live Story embed test sent successfully.")
 
 
+def send_casa_test():
+    require_config()
+    if not CASA_DISCORD_WEBHOOK_URL:
+        raise RuntimeError("CASA_DISCORD_WEBHOOK_URL is missing.")
+
+    loader = make_loader()
+    profile_ids = load_or_resolve_profile_ids(loader)
+    casa_users = ["lacasadeusc", "usccasa"]
+    casa_ids = [profile_ids[u] for u in casa_users if u in profile_ids]
+    id_to_username = {profile_ids[u]: u for u in casa_users if u in profile_ids}
+
+    recent = []
+    for story in loader.get_stories(userids=casa_ids):
+        username = id_to_username.get(int(story.owner_id), story.owner_username)
+        for item in story.get_items():
+            recent.append((item.date_utc, item, username))
+
+    if not recent:
+        raise RuntimeError(
+            "Neither @lacasadeusc nor @usccasa currently has an active Story to test."
+        )
+
+    recent.sort(key=lambda x: x[0], reverse=True)
+    _, item, username = recent[0]
+
+    print(
+        f"Testing CASA Discord route with the most recent active Story from @{username} "
+        f"(Story {item.mediaid})."
+    )
+
+    if not post_story_item(item, username):
+        raise RuntimeError("CASA Discord Story test failed.")
+
+    print("CASA Story test sent successfully.")
+
+
 def main():
+    if TEST_CASA_ONLY:
+        send_casa_test()
+        return
+
     if TEST_DISCORD_ONLY:
         send_discord_test()
         return
