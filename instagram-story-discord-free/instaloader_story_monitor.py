@@ -245,18 +245,17 @@ def post_story_item(item, username):
     media_url = item.video_url if item.is_video else item.url
     profile_url = f"https://www.instagram.com/{username}/"
 
-    # Spoilered role ping, then a linked bold Story title, followed by a
-    # dedicated spacer line before the embed.
+    # Spoilered role ping, then a compact bold header. Only the Instagram
+    # handle itself is clickable.
     message_content = (
-        f"||<@&{DISCORD_PING_USER_ID}>||\n\n"
-        f"**[@{username} — New Instagram Story]({profile_url})**\n\n"
-        "\u200b"
+        f"||<@&{DISCORD_PING_USER_ID}>||\n"
+        f"**[@{username}]({profile_url}) — New Instagram Story**"
     )
 
     embed = {
         "timestamp": item.date_utc.isoformat(),
         "footer": {
-            "text": "USC Instagram Story monitor • Made by @minirrml"
+            "text": "USC Instagram Story monitor • Made by @minirml"
         },
     }
 
