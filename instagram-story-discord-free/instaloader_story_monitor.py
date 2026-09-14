@@ -247,7 +247,7 @@ def post_story_item(item, username):
 
     # Put the ping on its own spoilered line, followed by a visual line break
     # before Discord renders the embed.
-    ping_content = f"||<@{DISCORD_PING_USER_ID}>||\n\u200b"
+    ping_content = f"||<@&{DISCORD_PING_USER_ID}>||\n\u200b"
 
     embed = {
         "title": f"@{username} — New Instagram Story",
@@ -279,7 +279,7 @@ def post_story_item(item, username):
             "embeds": [embed],
             "allowed_mentions": {
                 "parse": [],
-                "users": [DISCORD_PING_USER_ID],
+                "roles": [DISCORD_PING_USER_ID],
             },
         }
         files = {
@@ -312,38 +312,42 @@ def post_story_item(item, username):
         "embeds": [fallback_embed],
         "allowed_mentions": {
             "parse": [],
-            "users": [DISCORD_PING_USER_ID],
+            "roles": [DISCORD_PING_USER_ID],
         },
     }
     return discord_request(fallback)
 
 
 def send_discord_test():
-    if not DISCORD_WEBHOOK_URL:
-        raise RuntimeError("DISCORD_WEBHOOK_URL is missing.")
+    require_config()
 
-    ping_content = f"||<@{DISCORD_PING_USER_ID}>||\n\u200b"
-    embed = {
-        "title": "@test.account — New Instagram Story",
-        "url": "https://www.instagram.com/",
-        "description": (
-            "**TEST MESSAGE**\n"
-            "This is how future Instagram Story notifications will look."
-        ),
-        "footer": {"text": "USC Instagram Story monitor • test"},
-    }
-    payload = {
-        "content": ping_content,
-        "embeds": [embed],
-        "allowed_mentions": {
-            "parse": [],
-            "users": [DISCORD_PING_USER_ID],
-        },
-    }
+    loader = make_loader()
+    profile_ids = load_or_resolve_profile_ids(loader)
+    id_to_username = {v: k for k, v in profile_ids.items()}
 
-    if not discord_request(payload):
-        raise RuntimeError("Discord test message failed.")
-    print("Discord embed test sent successfully.")
+    recent = []
+    for story in loader.get_stories(userids=list(profile_ids.values())):
+        username = id_to_username.get(int(story.owner_id), story.owner_username)
+        for item in story.get_items():
+            recent.append((item.date_utc, item, username))
+
+    if not recent:
+        raise RuntimeError(
+            "None of the monitored accounts currently has an active Story to use for testing."
+        )
+
+    recent.sort(key=lambda x: x[0], reverse=True)
+    _, item, username = recent[0]
+
+    print(
+        f"Testing Discord format with the most recent active Story from @{username} "
+        f"(Story {item.mediaid})."
+    )
+
+    if not post_story_item(item, username):
+        raise RuntimeError("Discord live Story test failed.")
+
+    print("Live Story embed test sent successfully.")
 
 
 def main():
