@@ -246,13 +246,14 @@ def post_story_item(item, username):
     profile_url = f"https://www.instagram.com/{username}/"
 
     message_content = (
-        f"||<@&{DISCORD_PING_USER_ID}>||\n"
-        f"**[@{username}]({profile_url}) — New Instagram Story**"
+        f"||<@&{DISCORD_PING_USER_ID}>||\n\n"
+        f"**[@{username}]({profile_url}) — New Instagram Story**\n"
+        "\u200b"
     )
 
     embed = {
         "timestamp": item.date_utc.isoformat(),
-        "footer": {"text": "Made by Mini"},
+        "footer": {"text": "Made by @minirml"},
     }
 
     try:
