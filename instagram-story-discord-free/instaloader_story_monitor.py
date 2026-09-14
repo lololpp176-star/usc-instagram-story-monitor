@@ -259,114 +259,79 @@ def post_story_item(item, username):
     profile_url = f"https://www.instagram.com/{username}/"
     webhook_url, role_id = destination_for(username)
 
-    message_content = (
-        f"||<@&{role_id}>||\n"
-        "\u200b"
-    )
-
-    embed = {
-        "description": (
+    # 1) Mention, then header. No embed.
+    header_payload = {
+        "content": (
+            f"||<@&{role_id}>||\n\n"
             f"### **[@{username}]({profile_url}) — New Instagram Story**"
         ),
-        "timestamp": item.date_utc.isoformat(),
-        "footer": {"text": "Made by @minirml"},
-    }
-
-    try:
-        media_bytes, content_type = download_media(media_url)
-        ext = extension_for(item.is_video, content_type)
-        filename = f"{username.replace('.', '_')}_{story_id}{ext}"
-
-        if item.is_video:
-            # Send the mention + embed first, then send the actual video as a
-            # second webhook message so Discord displays it underneath.
-            try:
-                embed["image"] = {"url": item.url}
-            except Exception:
-                pass
-
-            header_payload = {
-                "content": message_content,
-                "embeds": [embed],
-                "allowed_mentions": {
-                    "parse": [],
-                    "roles": [role_id],
-                },
-            }
-
-            if not discord_request(webhook_url, header_payload):
-                print(f"Discord embed failed for @{username}.")
-                return False
-
-            video_payload = {
-                "allowed_mentions": {"parse": []},
-            }
-            video_files = {
-                "files[0]": (
-                    filename,
-                    media_bytes,
-                    content_type or "video/mp4",
-                )
-            }
-
-            if discord_request(
-                webhook_url,
-                video_payload,
-                files=video_files,
-            ):
-                return True
-
-            print(
-                f"Discord video upload failed for @{username}; "
-                "trying direct video URL."
-            )
-            return discord_request(
-                webhook_url,
-                {
-                    "content": media_url,
-                    "allowed_mentions": {"parse": []},
-                },
-            )
-
-        embed["image"] = {"url": f"attachment://{filename}"}
-
-        payload = {
-            "content": message_content,
-            "embeds": [embed],
-            "allowed_mentions": {
-                "parse": [],
-                "roles": [role_id],
-            },
-        }
-        files = {
-            "files[0]": (
-                filename,
-                media_bytes,
-                content_type or "application/octet-stream",
-            )
-        }
-
-        if discord_request(webhook_url, payload, files=files):
-            return True
-
-        print(f"Discord upload failed for @{username}; trying direct media URL.")
-
-    except Exception as exc:
-        print(f"Could not download media for @{username}: {exc}")
-
-    fallback_embed = {
-        **embed,
-        "image": {"url": media_url},
-    }
-    fallback = {
-        "content": message_content,
-        "embeds": [fallback_embed],
         "allowed_mentions": {
             "parse": [],
             "roles": [role_id],
         },
     }
-    return discord_request(webhook_url, fallback)
+
+    if not discord_request(webhook_url, header_payload):
+        print(f"Discord header failed for @{username}.")
+        return False
+
+    # 2) Story media as its own message so it sits directly under the header.
+    try:
+        media_bytes, content_type = download_media(media_url)
+        ext = extension_for(item.is_video, content_type)
+        filename = f"{username.replace('.', '_')}_{story_id}{ext}"
+
+        media_payload = {
+            "allowed_mentions": {"parse": []},
+        }
+        media_files = {
+            "files[0]": (
+                filename,
+                media_bytes,
+                content_type or (
+                    "video/mp4" if item.is_video
+                    else "application/octet-stream"
+                ),
+            )
+        }
+
+        media_ok = discord_request(
+            webhook_url,
+            media_payload,
+            files=media_files,
+        )
+
+    except Exception as exc:
+        print(f"Could not download media for @{username}: {exc}")
+        media_ok = discord_request(
+            webhook_url,
+            {
+                "content": media_url,
+                "allowed_mentions": {"parse": []},
+            },
+        )
+
+    if not media_ok:
+        print(f"Discord media failed for @{username}.")
+        return False
+
+    # 3) Small footer underneath the media.
+    story_timestamp = int(item.date_utc.timestamp())
+    footer_ok = discord_request(
+        webhook_url,
+        {
+            "content": (
+                f"-# Made by @minirml • <t:{story_timestamp}:f>"
+            ),
+            "allowed_mentions": {"parse": []},
+        },
+    )
+
+    if not footer_ok:
+        print(f"Discord footer failed for @{username}.")
+
+    # Avoid reposting the Story if only the cosmetic footer failed.
+    return True
 
 
 def send_discord_test():
