@@ -1,7 +1,7 @@
 {
   "enabled": false,
-  "paused": true,
+  "paused": false,
   "attempts": 1,
   "last_attempt": 1789427554.2550278,
-  "reason": "Check failed or was interrupted; manual review required"
+  "reason": "Fresh session installed; one controlled retry authorized"
 }
