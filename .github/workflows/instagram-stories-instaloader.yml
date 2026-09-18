@@ -1,6 +1,9 @@
 name: Instagram Stories via Free Public Viewer
 
 on:
+  push:
+    paths:
+      - .github/workflows/instagram-stories-instaloader.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -45,8 +48,8 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          MONITOR_ONLY: ${{ inputs.mode == 'single-check' && 'usccasa' || '' }}
-          BASELINE_ONLY: ${{ inputs.mode == 'single-check' && 'true' || 'false' }}
+          MONITOR_ONLY: ${{ github.event_name == 'push' && 'usccasa' || (inputs.mode == 'single-check' && 'usccasa' || '') }}
+          BASELINE_ONLY: ${{ github.event_name == 'push' && 'true' || (inputs.mode == 'single-check' && 'true' || 'false') }}
         run: python -u instagram-story-discord-free/igexport_story_monitor.py
 
       - name: Save Story state
