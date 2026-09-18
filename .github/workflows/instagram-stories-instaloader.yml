@@ -1,10 +1,10 @@
-name: Instagram Stories via Free Public Viewer
+name: Instagram Stories via Managed Story API
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "single-check baselines one account; normal checks the current cohort"
+        description: "single-check baselines @usccasa; normal checks all accounts when due"
         required: true
         default: normal
         type: choice
@@ -16,48 +16,62 @@ permissions:
   contents: write
 
 concurrency:
-  group: instagram-story-monitor-public-viewer
+  group: instagram-story-monitor-managed-api
   cancel-in-progress: false
 
 jobs:
   check-stories:
-    # Keep cron-job.org harmless while free public viewers are unavailable.
-    if: inputs.mode == 'single-check'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Check managed API configuration
+        id: config
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          MONITOR_MODE: ${{ inputs.mode }}
+        run: |
+          if [ -n "$APIFY_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          elif [ "$MONITOR_MODE" = "single-check" ]; then
+            echo "APIFY_TOKEN is not configured." >&2
+            exit 1
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "APIFY_TOKEN is not configured; scheduled check safely skipped."
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.config.outputs.configured == 'true'
         with:
           python-version: "3.12"
 
       - name: Install requirements
-        run: python -m pip install -r instagram-story-discord-free/requirements-igexport.txt
-
-      - name: Verify browser
-        run: |
-          google-chrome --version
-          chromedriver --version
+        if: steps.config.outputs.configured == 'true'
+        run: python -m pip install -r instagram-story-discord-free/requirements-apify.txt
 
       - name: Check public Instagram Stories
-        id: check
+        if: steps.config.outputs.configured == 'true'
         timeout-minutes: 7
         env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          MONITOR_ONLY: ${{ github.event_name == 'push' && 'usccasa' || (inputs.mode == 'single-check' && 'usccasa' || '') }}
-          BASELINE_ONLY: ${{ github.event_name == 'push' && 'true' || (inputs.mode == 'single-check' && 'true' || 'false') }}
-        run: python -u instagram-story-discord-free/igexport_story_monitor.py
+          MONITOR_ONLY: ${{ inputs.mode == 'single-check' && 'usccasa' || '' }}
+          FORCE_CHECK: ${{ inputs.mode == 'single-check' && 'true' || 'false' }}
+          BASELINE_ONLY: ${{ inputs.mode == 'single-check' && 'true' || 'false' }}
+        run: python -u instagram-story-discord-free/apify_story_monitor.py
 
       - name: Save Story state
-        if: always()
+        if: always() && steps.config.outputs.configured == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add instagram-story-discord-free/seen_instagram_stories_instaloader.json
           if ! git diff --cached --quiet; then
-            git commit -m "Update public Story monitor state"
+            git commit -m "Update managed Story monitor state"
             git push origin HEAD:main
           fi
