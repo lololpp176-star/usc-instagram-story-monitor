@@ -1,10 +1,6 @@
 name: Instagram Stories via Free Public Viewer
-# Temporary push trigger is removed after the smoke test passes.
 
 on:
-  push:
-    paths:
-      - .github/workflows/instagram-stories-instaloader.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -25,7 +21,8 @@ concurrency:
 
 jobs:
   check-stories:
-    if: github.event_name == 'push' || inputs.mode == 'single-check'
+    # Keep cron-job.org harmless while free public viewers are unavailable.
+    if: inputs.mode == 'single-check'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
