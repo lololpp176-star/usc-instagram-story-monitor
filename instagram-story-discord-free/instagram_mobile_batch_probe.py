@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from instagrapi import Client
+from instagrapi.exceptions import ClientJSONDecodeError
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,7 +28,23 @@ def main():
             "batch_size": len(reel_ids),
         }
     )
-    result = client.private_request("feed/reels_media_stream/", data=data)
+    try:
+        result = client.private_request("feed/reels_media_stream/", data=data)
+    except ClientJSONDecodeError:
+        # Instagram can stream a second JSON object after the reels payload.
+        # Instagrapi rejects the otherwise-valid response as "Extra data".
+        response_text = client.last_response.text.lstrip()
+        decoder = json.JSONDecoder()
+        objects = []
+        while response_text:
+            value, offset = decoder.raw_decode(response_text)
+            objects.append(value)
+            response_text = response_text[offset:].lstrip()
+        result = next(
+            value for value in objects
+            if isinstance(value, dict) and (value.get("reels") or value.get("reels_media"))
+        )
+        print(f"Accepted streamed Instagram response ({len(objects)} JSON objects).")
 
     reels = result.get("reels") or result.get("reels_media") or []
     if isinstance(reels, dict):
