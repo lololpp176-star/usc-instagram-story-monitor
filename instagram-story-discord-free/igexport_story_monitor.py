@@ -176,6 +176,16 @@ def fetch_stories(driver, username):
     try:
         wait_for_profile_result(driver, username)
     except TimeoutException as exc:
+        body_text = ""
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text[:1500]
+        except Exception:
+            pass
+        print(
+            "Public viewer diagnostic: "
+            f"url={driver.current_url!r} title={driver.title!r} body={body_text!r}",
+            file=sys.stderr,
+        )
         raise RuntimeError(f"Public viewer timed out for @{username}.") from exc
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
