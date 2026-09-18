@@ -1,4 +1,5 @@
 name: Instagram Stories via Free Public Viewer
+# Temporary push trigger is removed after the smoke test passes.
 
 on:
   push:
