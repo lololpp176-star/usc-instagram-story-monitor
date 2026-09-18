@@ -1,6 +1,5 @@
 import json
 import os
-import pickle
 from pathlib import Path
 
 from instagrapi import Client
@@ -8,19 +7,12 @@ from instagrapi import Client
 
 BASE_DIR = Path(__file__).resolve().parent
 PROFILE_IDS_FILE = BASE_DIR / "instagram_profile_ids.json"
-SESSION_FILE = Path(os.environ["IG_SESSION_FILE"])
 
 
 def main():
-    with SESSION_FILE.open("rb") as handle:
-        cookies = pickle.load(handle)
-
-    session_id = str(cookies.get("sessionid") or "")
+    session_id = os.environ.get("INSTAGRAM_SESSIONID", "").strip()
     if not session_id:
-        raise RuntimeError(
-            "The saved Instaloader session has no sessionid cookie. "
-            f"Available cookie names: {', '.join(sorted(cookies)) or '(none)'}"
-        )
+        raise RuntimeError("INSTAGRAM_SESSIONID is empty or unavailable.")
 
     profile_ids = json.loads(PROFILE_IDS_FILE.read_text(encoding="utf-8"))
     reel_ids = [str(value) for value in profile_ids.values()]
