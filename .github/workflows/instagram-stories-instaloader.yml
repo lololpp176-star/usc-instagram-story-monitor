@@ -36,7 +36,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install requirements
-        run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
+        run: python -m pip install -r instagram-story-discord-free/requirements-mobile-probe.txt
 
       - name: Restore saved Instagram session
         env:
@@ -51,10 +51,7 @@ jobs:
         timeout-minutes: 4
         env:
           IG_USERNAME: botwatch92848
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          BASELINE_ONLY: ${{ github.event_name == 'push' && 'true' || (inputs.mode == 'single-check' && 'true' || 'false') }}
-        run: python -u instagram-story-discord-free/instaloader_story_monitor.py
+        run: python -u instagram-story-discord-free/instagram_mobile_batch_probe.py
 
       - name: Save Story state
         if: always()
