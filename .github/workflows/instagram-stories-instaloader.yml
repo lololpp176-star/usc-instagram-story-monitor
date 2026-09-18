@@ -1,4 +1,4 @@
-name: Instagram Stories — Single Batched Request
+name: Instagram Stories — Mobile Batch Probe
 
 on:
   push:
