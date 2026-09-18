@@ -54,6 +54,7 @@ CASA_DISCORD_WEBHOOK_URL = os.getenv("CASA_DISCORD_WEBHOOK_URL", "").strip()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 TEST_DISCORD_ONLY = os.getenv("TEST_DISCORD_ONLY", "").lower() in {"1", "true", "yes"}
 TEST_CASA_ONLY = os.getenv("TEST_CASA_ONLY", "").lower() in {"1", "true", "yes"}
+BASELINE_ONLY = os.getenv("BASELINE_ONLY", "").lower() in {"1", "true", "yes"}
 
 # Discord user to ping before each Story embed.
 DISCORD_PING_USER_ID = "1548822200545579098"
@@ -110,13 +111,10 @@ def make_loader():
         quiet=True,
     )
     loader.load_session_from_file(IG_USERNAME, filename=SESSION_FILE)
-    logged_in_as = loader.test_login()
-    if not logged_in_as:
-        raise RuntimeError(
-            "The Instagram session is no longer valid. "
-            "Create a fresh Instaloader session and replace the GitHub secret."
-        )
-    print(f"Instagram session valid for @{logged_in_as}.")
+    # Do not call test_login() here. It adds a separate GraphQL request before
+    # every check and was the request that Instagram rate-limited. get_stories()
+    # below validates the session while fetching all 32 IDs in one batched query.
+    print(f"Loaded the saved Instagram session for @{IG_USERNAME}.")
     return loader
 
 
@@ -441,11 +439,11 @@ def main():
 
     current_ids = {str(item.mediaid) for _, item, _ in found_items}
 
-    if first_run:
+    if first_run or BASELINE_ONLY:
         seen.update(current_ids)
         save_seen(seen)
         print(
-            f"Initial baseline saved ({len(current_ids)} active Stories). "
+            f"Baseline saved ({len(current_ids)} active Stories). "
             "Nothing posted."
         )
         return
