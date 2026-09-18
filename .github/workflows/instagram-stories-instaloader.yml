@@ -1,4 +1,4 @@
-name: Instagram Stories — Mobile Batch Probe v2
+name: Instagram Stories — Mobile Batch Monitor
 
 on:
   push:
@@ -24,7 +24,6 @@ concurrency:
 
 jobs:
   check-stories:
-    if: github.event_name == 'push' || inputs.mode == 'single-check'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,7 +41,10 @@ jobs:
         timeout-minutes: 4
         env:
           INSTAGRAM_SESSIONID: ${{ secrets.INSTAGRAM_SESSIONID }}
-        run: python -u instagram-story-discord-free/instagram_mobile_batch_probe.py
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
+          BASELINE_ONLY: ${{ github.event_name == 'push' || inputs.mode == 'single-check' }}
+        run: python -u instagram-story-discord-free/instagram_mobile_story_monitor.py
 
       - name: Save Story state
         if: always()
