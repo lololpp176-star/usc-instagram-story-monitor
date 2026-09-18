@@ -17,7 +17,10 @@ def main():
 
     session_id = str(cookies.get("sessionid") or "")
     if not session_id:
-        raise RuntimeError("The saved Instaloader session has no sessionid cookie.")
+        raise RuntimeError(
+            "The saved Instaloader session has no sessionid cookie. "
+            f"Available cookie names: {', '.join(sorted(cookies)) or '(none)'}"
+        )
 
     profile_ids = json.loads(PROFILE_IDS_FILE.read_text(encoding="utf-8"))
     reel_ids = [str(value) for value in profile_ids.values()]
