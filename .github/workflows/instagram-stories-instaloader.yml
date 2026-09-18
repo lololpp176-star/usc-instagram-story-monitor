@@ -1,10 +1,13 @@
-name: Instagram Stories via Managed Story API
+name: Instagram Stories — Single Batched Request
 
 on:
+  push:
+    paths:
+      - .github/workflows/instagram-stories-instaloader.yml
   workflow_dispatch:
     inputs:
       mode:
-        description: "single-check baselines @usccasa; normal checks all accounts when due"
+        description: "single-check baselines all accounts; normal runs the monitor"
         required: true
         default: normal
         type: choice
@@ -16,62 +19,54 @@ permissions:
   contents: write
 
 concurrency:
-  group: instagram-story-monitor-managed-api
+  group: instagram-story-monitor-batched
   cancel-in-progress: false
 
 jobs:
   check-stories:
+    if: github.event_name == 'push' || inputs.mode == 'single-check'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-
-      - name: Check managed API configuration
-        id: config
-        env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-          MONITOR_MODE: ${{ inputs.mode }}
-        run: |
-          if [ -n "$APIFY_TOKEN" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          elif [ "$MONITOR_MODE" = "single-check" ]; then
-            echo "APIFY_TOKEN is not configured." >&2
-            exit 1
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "APIFY_TOKEN is not configured; scheduled check safely skipped."
-          fi
-
       - uses: actions/setup-python@v5
-        if: steps.config.outputs.configured == 'true'
         with:
           python-version: "3.12"
 
       - name: Install requirements
-        if: steps.config.outputs.configured == 'true'
-        run: python -m pip install -r instagram-story-discord-free/requirements-apify.txt
+        run: python -m pip install -r instagram-story-discord-free/requirements-instaloader.txt
 
-      - name: Check public Instagram Stories
-        if: steps.config.outputs.configured == 'true'
-        timeout-minutes: 7
+      - name: Restore saved Instagram session
         env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          INSTAGRAM_SESSION_B64: ${{ secrets.INSTAGRAM_SESSION_B64 }}
+        run: |
+          test -n "$INSTAGRAM_SESSION_B64"
+          printf '%s' "$INSTAGRAM_SESSION_B64" | base64 --decode > "$RUNNER_TEMP/instagram-session"
+          chmod 600 "$RUNNER_TEMP/instagram-session"
+          echo "IG_SESSION_FILE=$RUNNER_TEMP/instagram-session" >> "$GITHUB_ENV"
+
+      - name: Check all monitored Stories in one batch
+        timeout-minutes: 4
+        env:
+          IG_USERNAME: botwatch92848
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          MONITOR_ONLY: ${{ inputs.mode == 'single-check' && 'usccasa' || '' }}
-          FORCE_CHECK: ${{ inputs.mode == 'single-check' && 'true' || 'false' }}
-          BASELINE_ONLY: ${{ inputs.mode == 'single-check' && 'true' || 'false' }}
-        run: python -u instagram-story-discord-free/apify_story_monitor.py
+          BASELINE_ONLY: ${{ github.event_name == 'push' && 'true' || (inputs.mode == 'single-check' && 'true' || 'false') }}
+        run: python -u instagram-story-discord-free/instaloader_story_monitor.py
 
       - name: Save Story state
-        if: always() && steps.config.outputs.configured == 'true'
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add instagram-story-discord-free/seen_instagram_stories_instaloader.json
           if ! git diff --cached --quiet; then
-            git commit -m "Update managed Story monitor state"
+            git commit -m "Update batched Story monitor state"
             git push origin HEAD:main
           fi
+
+      - name: Remove temporary session
+        if: always()
+        run: rm -f "$RUNNER_TEMP/instagram-session"
