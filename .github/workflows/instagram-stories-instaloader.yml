@@ -1,9 +1,6 @@
 name: Instagram Stories — Mobile Batch Monitor
 
 on:
-  push:
-    paths:
-      - .github/workflows/instagram-stories-instaloader.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -43,7 +40,7 @@ jobs:
           INSTAGRAM_SESSIONID: ${{ secrets.INSTAGRAM_SESSIONID }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CASA_DISCORD_WEBHOOK_URL: ${{ secrets.CASA_DISCORD_WEBHOOK_URL }}
-          BASELINE_ONLY: ${{ github.event_name == 'push' || inputs.mode == 'single-check' }}
+          BASELINE_ONLY: ${{ inputs.mode == 'single-check' }}
         run: python -u instagram-story-discord-free/instagram_mobile_story_monitor.py
 
       - name: Save Story state
